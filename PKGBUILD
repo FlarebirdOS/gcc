@@ -14,13 +14,14 @@ pkgname=(
     gcc-gdc-32bit
     gcc-m2
     gcc-m2-32bit
+    gcc-rust
     gcc-gcobol
     lto-dump
     libgccjit
 )
 pkgbase=gcc
 pkgver=15.2.0
-pkgrel=3
+pkgrel=4
 pkgdesc="The GNU Compiler Collection"
 arch=('x86_64')
 url="https://gcc.gnu.org"
@@ -30,6 +31,7 @@ license=(
 )
 makedepends=(
     'binutils'
+    'doxygen'
     'gcc-gdc'
     'gcc-gdc-32bit'
     'gcc-gnat'
@@ -39,6 +41,7 @@ makedepends=(
     'isl'
     'mpc'
     'python'
+    'rust'
     'zstd'
 )
 options=('!emptydirs' '!lto')
@@ -67,7 +70,7 @@ prepare() {
 
     patch -Np0 < ${srcdir}/gcc-ada-repro.patch
 
-    mkdir ${pkgbase}-build libgccjit-build
+    mkdir flarebird-build libgccjit-flarebird-build
 }
 
 build() {
@@ -107,10 +110,10 @@ build() {
     CXXFLAGS=${CXXFLAGS/-Werror=format-security/}
 
     (
-        cd ${pkgbase}-${pkgver}/${pkgbase}-build
+        cd ${pkgbase}-${pkgver}/flarebird-build
 
         ../configure   \
-            --enable-languages=ada,c,c++,d,fortran,go,lto,m2,objc,obj-c++,cobol  \
+            --enable-languages=ada,c,c++,d,fortran,go,lto,m2,objc,obj-c++,rust,cobol  \
             --enable-bootstrap  \
             "${configure_args[@]:?configure_args unset}"
 
@@ -122,13 +125,13 @@ build() {
                 bootstrap
 
         # make documentation
-        # make -O -C ${CHOST}/libstdc++-v3/doc doc-man-doxygen
+        make -O -C ${CHOST}/libstdc++-v3/doc doc-man-doxygen
     )
 
     (
         # Build libgccjit separately, to avoid building all compilers with --enable-host-shared
         # which brings a performance penalty
-        cd ${pkgbase}-${pkgver}/libgccjit-build
+        cd ${pkgbase}-${pkgver}/libgccjit-flarebird-build
 
         ../configure                \
             --enable-languages=jit  \
@@ -143,7 +146,7 @@ build() {
                 LDFLAGS_FOR_TARGET="${LDFLAGS}" \
                 all-gcc
 
-        cp -a gcc/libgccjit.so* ../${pkgbase}-build/gcc/
+        cp -a gcc/libgccjit.so* ../flarebird-build/gcc/
     )
 }
 
@@ -153,7 +156,7 @@ package_gcc() {
     depends=("${pkgbase}-libs=${pkgver}-${pkgrel}" 'binutils' 'mpc' 'isl' 'zstd')
     options=('!emptydirs' 'staticlibs')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} install-driver install-cpp install-gcc-ar \
         c++.install-common install-headers install-plugin install-lto-wrapper
@@ -215,7 +218,7 @@ package_gcc() {
     install -Dm755 ${srcdir}/c99 ${pkgdir}/usr/bin/c99
 
     # install the libstdc++ man pages
-    # make -C ${CHOST}/libstdc++-v3/doc DESTDIR=${pkgdir} doc-install-man
+    make -C ${CHOST}/libstdc++-v3/doc DESTDIR=${pkgdir} doc-install-man
 
     # byte-compile python libraries
     python3 -m compileall ${pkgdir}/usr/share/gcc-${pkgver%%+*}/
@@ -231,7 +234,7 @@ package_gcc-libs() {
     depends=('glibc>=2.27')
     options=('!emptydirs' '!strip')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/libgcc DESTDIR=${pkgdir} install-shared
     rm -f ${pkgdir}/usr/lib64/gcc/${CHOST}/${pkgver%%+*}/libgcc_eh.a
@@ -263,7 +266,7 @@ package_gcc-libs-32bit() {
 
     mv -v gcclibs32bit/* ${pkgdir}
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/32/libgcc DESTDIR=${pkgdir} install
 
@@ -299,7 +302,7 @@ package_gcc-fortran() {
     pkgdesc='Fortran front-end for GCC'
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/libgfortran DESTDIR=${pkgdir} install-toolexeclibLTLIBRARIES
 
@@ -320,7 +323,7 @@ package_gcc-fortran-32bit() {
         "${pkgbase}-fortran=${pkgver}-${pkgrel}"
     )
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/32/libgfortran DESTDIR=${pkgdir} install-toolexeclibLTLIBRARIES
 
@@ -335,7 +338,7 @@ package_gcc-objc() {
     pkgdesc='Objective-C front-end for GCC'
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/libobjc DESTDIR=${pkgdir} install-libs
 
@@ -354,7 +357,7 @@ package_gcc-objc-32bit() {
         "${pkgbase}-objc=${pkgver}-${pkgrel}"
     )
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/32/libobjc DESTDIR=${pkgdir} install-libs
 }
@@ -364,7 +367,7 @@ package_gcc-gnat() {
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
     options=('!emptydirs' 'staticlibs')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} ada.install-{common,info}
 
@@ -390,7 +393,7 @@ package_gcc-gnat-32bit() {
     )
     options=('!emptydirs' 'staticlibs')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/32/libada DESTDIR=${pkgdir} INSTALL="install" INSTALL_DATA="install -m644" install-libada
 
@@ -408,7 +411,7 @@ package_gcc-go() {
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
     conflicts=('go')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/libgo DESTDIR=${pkgdir} install-toolexeclibLTLIBRARIES
 
@@ -430,7 +433,7 @@ package_gcc-go-32bit() {
         "${pkgbase}-go=${pkgver}-${pkgrel}"
     )
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C ${CHOST}/32/libgo DESTDIR=${pkgdir} install-toolexeclibLTLIBRARIES
 
@@ -443,7 +446,7 @@ package_gcc-gdc() {
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
     options=('staticlibs')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} d.install-{common,man,info}
 
@@ -470,7 +473,7 @@ package_gcc-m2() {
     pkgdesc='Modula-2 frontend for GCC'
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} m2.install-{common,man,info}
 
@@ -499,7 +502,7 @@ package_gcc-rust() {
     pkgdesc="Rust frontend for GCC"
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} rust.install-{common,man,info}
 
@@ -512,7 +515,7 @@ package_gcc-gcobol() {
     pkgdesc="Cobol frontend for GCC"
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} cobol.install-{common,man,info}
 
@@ -523,7 +526,7 @@ package_lto-dump() {
     pkgdesc="Dump link time optimization object files"
     depends=("${pkgbase}=${pkgver}-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} lto.install-{common,man,info}
 }
@@ -532,7 +535,7 @@ package_libgccjit() {
     pkgdesc="Just-In-Time Compilation with GCC backend"
     depends=("gcc=$pkgver-${pkgrel}" 'isl')
 
-    cd ${pkgbase}-${pkgver}/${pkgbase}-build
+    cd ${pkgbase}-${pkgver}/flarebird-build
 
     make -C gcc DESTDIR=${pkgdir} jit.install-common jit.install-info
 }
